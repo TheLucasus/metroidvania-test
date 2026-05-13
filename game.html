@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sanctum of Echoes - Metroidvania</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: #0a0a0a;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            background: #1a1a2e;
+        }
+
+        #ui {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        .hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #a8dadc;
+            font-size: 14px;
+            font-family: 'Courier New', monospace;
+            line-height: 1.6;
+        }
+
+        .abilities-acquired {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: #a8dadc;
+            font-size: 13px;
+            font-family: 'Courier New', monospace;
+            text-align: right;
+            max-width: 200px;
+        }
+
+        .ability-item {
+            padding: 4px 8px;
+            margin: 2px 0;
+            background: rgba(41, 98, 255, 0.2);
+            border-left: 3px solid #2962ff;
+            transition: all 0.3s;
+        }
+
+        .ability-item.new {
+            background: rgba(76, 175, 80, 0.3);
+            border-left-color: #4caf50;
+            animation: pulse 0.5s ease-out;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .spirits-freed {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            color: #a8dadc;
+            font-size: 13px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .spirit-item {
+            padding: 3px 6px;
+            margin: 2px 0;
+            background: rgba(156, 39, 176, 0.2);
+            border-left: 3px solid #9c27b0;
+        }
+
+        .spirit-item.freed {
+            background: rgba(76, 175, 80, 0.3);
+            border-left-color: #4caf50;
+        }
+
+        #screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #0a0a0a;
+            z-index: 999;
+            pointer-events: all;
+        }
+
+        .screen-hidden {
+            display: none !important;
+        }
+
+        .screen-content {
+            text-align: center;
+            color: #a8dadc;
+            font-family: 'Courier New', monospace;
+            max-width: 800px;
+            padding: 40px;
+        }
+
+        .screen-title {
+            font-size: 48px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #f1faee;
+            text-shadow: 0 0 20px rgba(161, 218, 220, 0.5);
+        }
+
+        .screen-subtitle {
+            font-size: 24px;
+            color: #a8dadc;
+            margin-bottom: 30px;
+            font-style: italic;
+        }
+
+        .screen-text {
+            font-size: 16px;
+            line-height: 1.8;
+            margin-bottom: 40px;
+            color: #a8dadc;
+            text-align: left;
+        }
+
+        .screen-button {
+            background: #2962ff;
+            color: #f1faee;
+            border: 2px solid #a8dadc;
+            padding: 15px 40px;
+            font-size: 16px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            transition: all 0.3s;
+            margin: 10px;
+        }
+
+        .screen-button:hover {
+            background: #1e53e5;
+            box-shadow: 0 0 20px rgba(41, 98, 255, 0.5);
+            transform: scale(1.05);
+        }
+
+        .screen-button:active {
+            transform: scale(0.95);
+        }
+
+        .divider {
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #a8dadc, transparent);
+            margin: 30px 0;
+        }
+
+        .timer {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            font-size: 16px;
+            color: #a8dadc;
+            font-family: 'Courier New', monospace;
+        }
+
+        .message-log {
+            position: absolute;
+            bottom: 120px;
+            left: 20px;
+            color: #4caf50;
+            font-size: 13px;
+            font-family: 'Courier New', monospace;
+            max-width: 300px;
+            min-height: 40px;
+            animation: fadeInOut 4s ease-in-out;
+        }
+
+        @keyframes fadeInOut {
+            0% { opacity: 1; }
+            80% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="ui">
+        <div class="hud">
+            <div>SANCTUM OF ECHOES</div>
+            <div style="font-size: 12px; color: #666; margin-top: 5px;">v1.0</div>
+        </div>
+        <div class="abilities-acquired" id="abilitiesUI"></div>
+        <div class="spirits-freed" id="spiritsUI"></div>
+        <div class="timer" id="timer"></div>
+        <div class="message-log" id="message"></div>
+    </div>
+    <div id="screen" class="screen-content"></div>
+
+    <script>
+        // ==================== GAME STATE ====================
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+
+        const GAME_STATE = {
+            MENU: 'menu',
+            PLAYING: 'playing',
+            GAME_OVER: 'gameover',
+            WIN: 'win'
+        };
+
+        const ABILITIES = {
+            DASH: 'dash',
+            DOUBLE_JUMP: 'doubleJump',
+            ROCKET_BOOTS: 'rocketBoots',
+            PARACHUTE: 'parachute',
+            WALL_JUMP: 'wallJump'
+        };
+
+        const SPIRITS = {
+            ARCHITECT: 'architect',
+            MESSENGER: 'messenger',
+            GUARDIAN: 'guardian',
+            SEEKER: 'seeker',
+            SOVEREIGN: 'sovereign'
+        };
+
+        let gameState = GAME_STATE.MENU;
+        let gameStartTime = 0;
+        let elapsedTime = 0;
+
+        // ==================== PLAYER ====================
+        const player = {
+            x: 100,
+            y: 300,
+            width: 20,
+            height: 30,
+            velX: 0,
+            velY: 0,
+            speed: 5,
+            jumpPower: 12,
+            isJumping: false,
+            isWallSliding: false,
+            isOnGround: false,
+            abilities: [],
+            health: 100,
+            maxHealth: 100,
+            checkpointX: 100,
+            checkpointY: 300
+        };
+
+        // ==================== WORLD DATA ====================
+        const WORLD = {
+            width: 2000,
+            height: 1200,
+            gravity: 0.6,
+            friction: 0.85,
+            platforms: [],
+            walls: [],
+            spikes: [],
+            spiritGates: [],
+            savePoints: [],
+            spirits: []
+        };
+
+        let worldState = {
+            spiritsFreed: [],
+            checkpointLoaded: false
+        };
+
+        // ==================== LEVEL GENERATION ====================
+        function generateWorld() {
+            WORLD.platforms = [
+                // Starting area
+                { x: 0, y: 500, w: 200, h: 30, type: 'platform' },
+                { x: 200, y: 480, w: 150, h: 30, type: 'platform' },
+
+                // First section - Messenger's chamber (parachute)
+                { x: 400, y: 450, w: 100, h: 30, type: 'platform' },
+                { x: 500, y: 400, w: 100, h: 30, type: 'platform' },
+                { x: 600, y: 350, w: 80, h: 30, type: 'platform' },
+                { x: 700, y: 300, w: 200, h: 30, type: 'platform' },
+                { x: 850, y: 280, w: 100, h: 30, type: 'platform' },
+
+                // Guardian's section (dash)
+                { x: 1000, y: 350, w: 150, h: 30, type: 'platform' },
+                { x: 1200, y: 320, w: 100, h: 30, type: platform' },
+                { x: 1350, y: 450, w: 150, h: 30, type: 'platform' },
+
+                // Seeker's chamber (double jump)
+                { x: 1550, y: 400, w: 100, h: 30, type: 'platform' },
+                { x: 1650, y: 350, w: 150, h: 30, type: 'platform' },
+
+                // Architect's wall (wall jump)
+                { x: 1850, y: 300, w: 50, h: 300, type: 'wall' },
+                { x: 1900, y: 200, w: 100, h: 30, type: 'platform' },
+
+                // Sovereign's peak (rocket boots)
+                { x: 1950, y: 100, w: 150, h: 30, type: 'platform' },
+                { x: 1800, y: 150, w: 100, h: 30, type: 'platform' },
+
+                // Final chamber approach
+                { x: 1600, y: 200, w: 200, h: 30, type: 'platform' },
+                { x: 1350, y: 150, w: 150, h: 30, type: 'platform' },
+
+                // Escape route
+                { x: 1100, y: 200, w: 200, h: 30, type: 'platform' },
+                { x: 850, y: 150, w: 200, h: 30, type: 'platform' },
+                { x: 600, y: 200, w: 150, h: 30, type: 'platform' },
+                { x: 400, y: 250, w: 100, h: 30, type: 'platform' },
+
+                // Floor
+                { x: 0, y: 1150, w: 2000, h: 50, type: 'platform' }
+            ];
+
+            WORLD.spikes = [
+                { x: 700, y: 280, w: 200, h: 20 },
+                { x: 1200, y: 290, w: 100, h: 20 },
+                { x: 1650, y: 320, w: 150, h: 20 }
+            ];
+
+            WORLD.spiritGates = [
+                { x: 750, y: 260, w: 40, h: 40, spirit: SPIRITS.MESSENGER, unlocked: false },
+                { x: 1250, y: 300, w: 40, h: 40, spirit: SPIRITS.GUARDIAN, unlocked: false },
+                { x: 1700, y: 320, w: 40, h: 40, spirit: SPIRITS.SEEKER, unlocked: false },
+                { x: 1850, y: 270, w: 40, h: 40, spirit: SPIRITS.ARCHITECT, unlocked: false },
+                { x: 1950, y: 70, w: 40, h: 40, spirit: SPIRITS.SOVEREIGN, unlocked: false }
+            ];
+
+            WORLD.savePoints = [
+                { x: 150, y: 460, w: 30, h: 30 },
+                { x: 750, y: 260, w: 30, h: 30 },
+                { x: 1250, y: 300, w: 30, h: 30 }
+            ];
+
+            // Map spirit requirements
+            WORLD.spiritGates[0].requireAbility = null; // Messenger - no requirement
+            WORLD.spiritGates[1].requireAbility = ABILITIES.PARACHUTE; // Guardian
+            WORLD.spiritGates[2].requireAbility = ABILITIES.DASH; // Seeker
+            WORLD.spiritGates[3].requireAbility = ABILITIES.DOUBLE_JUMP; // Architect
+            WORLD.spiritGates[4].requireAbility = ABILITIES.WALL_JUMP; // Sovereign
+        }
+
+        // ==================== SPIRIT ENCOUNTERS ====================
+        const SPIRIT_DATA = {
+            [SPIRITS.MESSENGER]: {
+                name: 'The Messenger',
+                title: 'Spirit of Whispers',
+                ability: ABILITIES.PARACHUTE,
+                abilityName: 'Whisper\'s Drift',
+                lore: 'An emissary between realms, now suspended in eternal descent...',
+                dialogue: 'The currents guide those who surrender to them.'
+            },
+            [SPIRITS.GUARDIAN]: {
+                name: 'The Guardian',
+                title: 'Spirit of Thorns',
+                ability: ABILITIES.DASH,
+                abilityName: 'Venom\'s Pulse',
+                lore: 'A protector consumed by the corruption it once fought...',
+                dialogue: 'Speed is the only weapon left in this dying place.'
+            },
+            [SPIRITS.SEEKER]: {
+                name: 'The Seeker',
+                title: 'Spirit of Echoes',
+                ability: ABILITIES.DOUBLE_JUMP,
+                abilityName: 'Resonance Echo',
+                lore: 'One who delved too deep, now fractured across dimensions...',
+                dialogue: 'A second breath. All that remains of hope.'
+            },
+            [SPIRITS.ARCHITECT]: {
+                name: 'The Architect',
+                title: 'Spirit of Stone',
+                ability: ABILITIES.WALL_JUMP,
+                abilityName: 'Thorns of Ascent',
+                lore: 'The builder of this sacred place, rooted in crystalline vines...',
+                dialogue: 'Climb through the growth. It was meant to hold life.'
+            },
+            [SPIRITS.SOVEREIGN]: {
+                name: 'The Sovereign',
+                title: 'Spirit of Flame',
+                ability: ABILITIES.ROCKET_BOOTS,
+                abilityName: 'Apex\'s Ascension',
+                lore: 'The last ruler, burning with the desperation of a final plea...',
+                dialogue: 'Rise. Rise beyond this tomb.'
+            }
+        };
+
+        // ==================== INPUT HANDLING ====================
+        const keys = {};
+        window.addEventListener('keydown', (e) => {
+            keys[e.key.toLowerCase()] = true;
+            if (e.key === ' ' && gameState === GAME_STATE.MENU) {
+                e.preventDefault();
+                startGame();
+            }
+            if (e.key === 's' && gameState === GAME_STATE.PLAYING) {
+                e.preventDefault();
+                saveGame();
+            }
+            if (e.key === 'l' && gameState === GAME_STATE.PLAYING) {
+                e.preventDefault();
+                loadGame();
+            }
+        });
+        window.addEventListener('keyup', (e) => {
+            keys[e.key.toLowerCase()] = false;
+        });
+
+        // ==================== SAVE/LOAD SYSTEM ====================
+        function saveGame() {
+            const save = {
+                playerX: player.x,
+                playerY: player.y,
+                abilities: player.abilities.slice(),
+                spiritsFreed: worldState.spiritsFreed.slice(),
+                health: player.health
+            };
+            localStorage.setItem('metroidvania_save', JSON.stringify(save));
+            showMessage('Game saved at checkpoint.');
+        }
+
+        function loadGame() {
+            const save = localStorage.getItem('metroidvania_save');
+            if (save) {
+                const data = JSON.parse(save);
+                player.x = data.playerX;
+                player.y = data.playerY;
+                player.abilities = data.abilities.slice();
+                worldState.spiritsFreed = data.spiritsFreed.slice();
+                player.health = data.health;
+                showMessage('Game loaded from checkpoint.');
+                updateUI();
+            }
+        }
+
+        // ==================== UI UPDATES ====================
+        function updateUI() {
+            const abilitiesUI = document.getElementById('abilitiesUI');
+            const spiritsUI = document.getElementById('spiritsUI');
+
+            abilitiesUI.innerHTML = '<strong>ABILITIES ACQUIRED:</strong><br>';
+            if (player.abilities.length === 0) {
+                abilitiesUI.innerHTML += '<span style="color: #666;">None</span>';
+            } else {
+                player.abilities.forEach(ability => {
+                    const spirit = Object.values(SPIRIT_DATA).find(s => s.ability === ability);
+                    if (spirit) {
+                        abilitiesUI.innerHTML += `<div class="ability-item">${spirit.abilityName}</div>`;
+                    }
+                });
+            }
+
+            spiritsUI.innerHTML = '<strong>SPIRITS FREED:</strong><br>';
+            const spiritNames = [
+                { id: SPIRITS.MESSENGER, name: 'Messenger' },
+                { id: SPIRITS.GUARDIAN, name: 'Guardian' },
+                { id: SPIRITS.SEEKER, name: 'Seeker' },
+                { id: SPIRITS.ARCHITECT, name: 'Architect' },
+                { id: SPIRITS.SOVEREIGN, name: 'Sovereign' }
+            ];
+            spiritNames.forEach(spirit => {
+                const freed = worldState.spiritsFreed.includes(spirit.id);
+                spiritsUI.innerHTML += `<div class="spirit-item ${freed ? 'freed' : ''}">${freed ? '✓' : '○'} ${spirit.name}</div>`;
+            });
+        }
+
+        function showMessage(text) {
+            const msgEl = document.getElementById('message');
+            msgEl.textContent = text;
+            msgEl.style.animation = 'none';
+            setTimeout(() => {
+                msgEl.style.animation = 'fadeInOut 4s ease-in-out';
+            }, 10);
+        }
+
+        // ==================== SCREEN MANAGEMENT ====================
+        function showScreen(type) {
+            const screenEl = document.getElementById('screen');
+            let html = '';
+
+            if (type === 'menu') {
+                html = `
+                    <div class="screen-content">
+                        <div class="screen-title">SANCTUM OF ECHOES</div>
+                        <div class="screen-subtitle">A Metroidvania Experience</div>
+                        <div class="divider"></div>
+                        <div class="screen-text">
+                            The sacred temple stands corrupted, its ancient halls twisted by forces beyond mortal comprehension. Within, five spirits remain trapped—fragments of a civilization long fallen to shadow.<br><br>
+                            You awaken at the threshold, drawn by whispers in the dark. Perhaps you can free them. Perhaps, in doing so, you might escape this dying place.<br><br>
+                            <strong>Controls:</strong><br>
+                            Arrow Keys / WASD - Move & Jump<br>
+                            Space - Jump<br>
+                            S - Save at Checkpoints<br>
+                            L - Load Last Save<br><br>
+                            Each spirit holds an ability. Collect them all to reach the summit and claim your freedom.
+                        </div>
+                        <div class="divider"></div>
+                        <button class="screen-button" onclick="startGame()">ENTER THE SANCTUM</button>
+                    </div>
+                `;
+            } else if (type === 'win') {
+                html = `
+                    <div class="screen-content">
+                        <div class="screen-title">ASCENSION</div>
+                        <div class="screen-subtitle">You have escaped the corruption.</div>
+                        <div class="divider"></div>
+                        <div class="screen-text">
+                            As you reach the summit of the Sanctum, the five spirits coalesce into a brilliant light. Their voices merge:<br><br>
+                            "Thank you, wanderer. We are no longer bound to this place of decay. And neither are you."<br><br>
+                            The barrier shatters. You step into morning light, leaving the Sanctum of Echoes behind—a tomb sealed forever, its ghosts finally at rest.
+                        </div>
+                        <div class="divider"></div>
+                        <button class="screen-button" onclick="location.reload()">PLAY AGAIN</button>
+                    </div>
+                `;
+            }
+
+            screenEl.innerHTML = html;
+            screenEl.classList.remove('screen-hidden');
+        }
+
+        function hideScreen() {
+            document.getElementById('screen').classList.add('screen-hidden');
+        }
+
+        function startGame() {
+            gameState = GAME_STATE.PLAYING;
+            gameStartTime = Date.now();
+            hideScreen();
+            generateWorld();
+            player.x = 100;
+            player.y = 300;
+            player.abilities = [];
+            player.health = player.maxHealth;
+            worldState.spiritsFreed = [];
+            worldState.checkpointLoaded = false;
+            updateUI();
+            gameLoop();
+        }
+
+        // ==================== PLAYER PHYSICS ====================
+        function updatePlayer() {
+            // Horizontal movement
+            if (keys['arrowleft'] || keys['a']) {
+                player.velX = -player.speed;
+            } else if (keys['arrowright'] || keys['d']) {
+                player.velX = player.speed;
+            } else {
+                player.velX *= player.friction;
+            }
+
+            player.x += player.velX;
+
+            // Apply gravity
+            player.velY += WORLD.gravity;
+
+            // Jump
+            if ((keys[' '] || keys['arrowup'] || keys['w']) && player.isOnGround) {
+                player.velY = -player.jumpPower;
+                player.isJumping = true;
+                player.isOnGround = false;
+            }
+
+            // Double jump
+            if (player.abilities.includes(ABILITIES.DOUBLE_JUMP) && 
+                (keys[' '] || keys['arrowup'] || keys['w']) && 
+                player.isJumping && !player.isOnGround && player.velY > 0) {
+                player.velY = -player.jumpPower * 0.7;
+                player.isJumping = false;
+            }
+
+            // Dash
+            if (player.abilities.includes(ABILITIES.DASH) && keys['shift']) {
+                player.velX *= 2.5;
+            }
+
+            // Parachute (slow fall)
+            if (player.abilities.includes(ABILITIES.PARACHUTE) && keys[' '] && player.velY > 0) {
+                player.velY *= 0.7;
+            }
+
+            // Rocket boots
+            if (player.abilities.includes(ABILITIES.ROCKET_BOOTS) && keys['w']) {
+                player.velY -= 0.8;
+            }
+
+            // Apply velocity
+            player.y += player.velY;
+
+            // Reset ground state
+            player.isOnGround = false;
+
+            // Collision with platforms
+            WORLD.platforms.forEach(platform => {
+                if (checkCollision(player, platform)) {
+                    if (player.velY > 0) {
+                        player.y = platform.y - player.height;
+                        player.velY = 0;
+                        player.isOnGround = true;
+                        player.isJumping = false;
+                    }
+                }
+            });
+
+            // Wall jump
+            if (player.abilities.includes(ABILITIES.WALL_JUMP)) {
+                let onWall = false;
+                WORLD.platforms.forEach(platform => {
+                    if (platform.w <= 50 && platform.h > 50) { // Treat thin tall platforms as walls
+                        if (player.x + player.width > platform.x && 
+                            player.x < platform.x + platform.w &&
+                            player.y + player.height > platform.y &&
+                            player.y < platform.y + platform.h) {
+                            onWall = true;
+                            player.isWallSliding = true;
+                            player.velY *= 0.8;
+                            if ((keys[' '] || keys['arrowup'] || keys['w'])) {
+                                player.velY = -player.jumpPower;
+                                player.velX = (player.x < platform.x + platform.w / 2) ? player.speed * 2 : -player.speed * 2;
+                            }
+                        }
+                    }
+                });
+                if (!onWall) player.isWallSliding = false;
+            }
+
+            // Spike collision
+            WORLD.spikes.forEach(spike => {
+                if (checkCollision(player, spike)) {
+                    player.health -= 10;
+                    player.y -= 20;
+                    if (player.health <= 0) {
+                        gameState = GAME_STATE.GAME_OVER;
+                    }
+                }
+            });
+
+            // Boundary checks
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > WORLD.width) player.x = WORLD.width - player.width;
+            if (player.y > WORLD.height) {
+                player.health = 0;
+                gameState = GAME_STATE.GAME_OVER;
+            }
+        }
+
+        function checkCollision(obj1, obj2) {
+            return obj1.x < obj2.x + obj2.w &&
+                   obj1.x + obj1.width > obj2.x &&
+                   obj1.y < obj2.y + obj2.h &&
+                   obj1.y + obj1.height > obj2.y;
+        }
+
+        // ==================== SPIRIT INTERACTION ====================
+        function updateSpirits() {
+            WORLD.spiritGates.forEach(gate => {
+                if (!gate.unlocked && checkCollision(player, gate)) {
+                    // Check if player has required ability
+                    if (gate.requireAbility === null || player.abilities.includes(gate.requireAbility)) {
+                        const spirit = SPIRIT_DATA[gate.spirit];
+                        gate.unlocked = true;
+                        
+                        // Add ability if not already acquired
+                        if (!player.abilities.includes(spirit.ability)) {
+                            player.abilities.push(spirit.ability);
+                        }
+
+                        // Mark spirit as freed
+                        if (!worldState.spiritsFreed.includes(gate.spirit)) {
+                            worldState.spiritsFreed.push(gate.spirit);
+                        }
+
+                        showMessage(`${spirit.name}: "${spirit.dialogue}"`);
+                        updateUI();
+
+                        // Check win condition
+                        if (worldState.spiritsFreed.length === 5) {
+                            checkWinCondition();
+                        }
+                    }
+                }
+            });
+        }
+
+        function checkWinCondition() {
+            // Win if player reaches the top with all 5 spirits
+            if (player.y < 50 && worldState.spiritsFreed.length === 5) {
+                gameState = GAME_STATE.WIN;
+                showScreen('win');
+            }
+        }
+
+        // ==================== RENDERING ====================
+        function drawGame() {
+            // Clear canvas
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Calculate camera
+            const cameraX = Math.max(0, Math.min(player.x - canvas.width / 3, WORLD.width - canvas.width));
+            const cameraY = Math.max(0, Math.min(player.y - canvas.height / 3, WORLD.height - canvas.height));
+
+            ctx.save();
+            ctx.translate(-cameraX, -cameraY);
+
+            // Draw platforms
+            ctx.fillStyle = '#4a5f8f';
+            WORLD.platforms.forEach(platform => {
+                ctx.fillRect(platform.x, platform.y, platform.w, platform.h);
+                // Border
+                ctx.strokeStyle = '#a8dadc';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(platform.x, platform.y, platform.w, platform.h);
+            });
+
+            // Draw spikes
+            ctx.fillStyle = '#e63946';
+            WORLD.spikes.forEach(spike => {
+                drawSpikes(spike.x, spike.y, spike.w, spike.h);
+            });
+
+            // Draw spirit gates
+            WORLD.spiritGates.forEach(gate => {
+                if (!gate.unlocked) {
+                    ctx.fillStyle = '#9c27b0';
+                    ctx.globalAlpha = 0.7;
+                    ctx.fillRect(gate.x, gate.y, gate.w, gate.h);
+                    ctx.globalAlpha = 1;
+                    ctx.strokeStyle = '#e1bee7';
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(gate.x, gate.y, gate.w, gate.h);
+                }
+            });
+
+            // Draw save points
+            ctx.fillStyle = '#4caf50';
+            WORLD.savePoints.forEach(savePoint => {
+                ctx.fillRect(savePoint.x, savePoint.y, savePoint.w, savePoint.h);
+                ctx.strokeStyle = '#81c784';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(savePoint.x, savePoint.y, savePoint.w, savePoint.h);
+            });
+
+            // Draw player
+            ctx.fillStyle = '#a8dadc';
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            ctx.strokeStyle = '#f1faee';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(player.x, player.y, player.width, player.height);
+
+            // Draw player aura based on abilities
+            if (player.abilities.length > 0) {
+                ctx.strokeStyle = `rgba(41, 98, 255, ${0.3 + player.abilities.length * 0.1})`;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(player.x + player.width / 2, player.y + player.height / 2, 30 + player.abilities.length * 5, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            ctx.restore();
+
+            // Draw HUD timer
+            const timerId = document.getElementById('timer');
+            if (gameState === GAME_STATE.PLAYING) {
+                elapsedTime = Math.floor((Date.now() - gameStartTime) / 1000);
+                const minutes = Math.floor(elapsedTime / 60);
+                const seconds = elapsedTime % 60;
+                timerId.textContent = `TIME: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+            }
+        }
+
+        function drawSpikes(x, y, w, h) {
+            const spikesCount = Math.floor(w / 15);
+            const spikeWidth = w / spikesCount;
+            for (let i = 0; i < spikesCount; i++) {
+                ctx.beginPath();
+                ctx.moveTo(x + i * spikeWidth, y + h);
+                ctx.lineTo(x + (i + 0.5) * spikeWidth, y);
+                ctx.lineTo(x + (i + 1) * spikeWidth, y + h);
+                ctx.fill();
+            }
+        }
+
+        // ==================== GAME LOOP ====================
+        function gameLoop() {
+            if (gameState === GAME_STATE.PLAYING) {
+                updatePlayer();
+                updateSpirits();
+                drawGame();
+                requestAnimationFrame(gameLoop);
+            } else if (gameState === GAME_STATE.GAME_OVER) {
+                showScreen('gameover');
+                document.getElementById('screen').innerHTML = `
+                    <div class="screen-content">
+                        <div class="screen-title">SANCTUM RECLAIMS</div>
+                        <div class="screen-subtitle">The corruption consumes all...</div>
+                        <div class="divider"></div>
+                        <div class="screen-text">
+                            You have fallen to the darkness of this place. The spirits remain trapped, and the Sanctum's curse deepens.
+                        </div>
+                        <button class="screen-button" onclick="location.reload()">TRY AGAIN</button>
+                    </div>
+                `;
+            }
+        }
+
+        // Show initial menu
+        showScreen('menu');
+    </script>
+</body>
+</html>
