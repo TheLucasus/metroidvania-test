@@ -153,6 +153,7 @@
             font-family: 'Courier New', monospace;
             transition: all 0.3s;
             margin: 10px;
+            pointer-events: all;
         }
 
         .screen-button:hover {
@@ -211,7 +212,7 @@
         <div class="timer" id="timer"></div>
         <div class="message-log" id="message"></div>
     </div>
-    <div id="screen" class="screen-content"></div>
+    <div id="screen"></div>
 
     <script>
         // ==================== GAME STATE ====================
@@ -308,7 +309,7 @@
 
                 // Guardian's section (dash)
                 { x: 1000, y: 350, w: 150, h: 30, type: 'platform' },
-                { x: 1200, y: 320, w: 100, h: 30, type: platform' },
+                { x: 1200, y: 320, w: 100, h: 30, type: 'platform' },
                 { x: 1350, y: 450, w: 150, h: 30, type: 'platform' },
 
                 // Seeker's chamber (double jump)
