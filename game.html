@@ -253,6 +253,7 @@
         let gameState = GAME_STATE.MENU;
         let gameStartTime = 0;
         let elapsedTime = 0;
+        let hasSaved = false;
 
         // ==================== PLAYER ====================
         const player = {
@@ -443,6 +444,7 @@
                 health: player.health
             };
             localStorage.setItem('metroidvania_save', JSON.stringify(save));
+            hasSaved = true;
             showMessage('Game saved at checkpoint.');
         }
 
@@ -455,6 +457,7 @@
                 player.abilities = data.abilities.slice();
                 worldState.spiritsFreed = data.spiritsFreed.slice();
                 player.health = data.health;
+                hasSaved = true;
                 showMessage('Game loaded from checkpoint.');
                 updateUI();
             }
@@ -562,6 +565,7 @@
             player.health = player.maxHealth;
             worldState.spiritsFreed = [];
             worldState.checkpointLoaded = false;
+            hasSaved = false;
             updateUI();
             gameLoop();
         }
@@ -811,18 +815,24 @@
                 drawGame();
                 requestAnimationFrame(gameLoop);
             } else if (gameState === GAME_STATE.GAME_OVER) {
-                showScreen('gameover');
-                document.getElementById('screen').innerHTML = `
-                    <div class="screen-content">
-                        <div class="screen-title">SANCTUM RECLAIMS</div>
-                        <div class="screen-subtitle">The corruption consumes all...</div>
-                        <div class="divider"></div>
-                        <div class="screen-text">
-                            You have fallen to the darkness of this place. The spirits remain trapped, and the Sanctum's curse deepens.
+                // If not saved, go to menu. If saved, try to load.
+                if (!hasSaved) {
+                    showScreen('menu');
+                } else {
+                    showScreen('gameover');
+                    document.getElementById('screen').innerHTML = `
+                        <div class="screen-content">
+                            <div class="screen-title">SANCTUM RECLAIMS</div>
+                            <div class="screen-subtitle">The corruption consumes all...</div>
+                            <div class="divider"></div>
+                            <div class="screen-text">
+                                You have fallen to the darkness of this place. The spirits remain trapped, and the Sanctum's curse deepens.
+                            </div>
+                            <button class="screen-button" onclick="loadGame(); gameState = '${GAME_STATE.PLAYING}'; gameLoop();">LOAD CHECKPOINT</button>
+                            <button class="screen-button" onclick="location.reload()">RETURN TO MENU</button>
                         </div>
-                        <button class="screen-button" onclick="location.reload()">TRY AGAIN</button>
-                    </div>
-                `;
+                    `;
+                }
             }
         }
 
